@@ -1,0 +1,979 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>L'Aventure Mathématique : La Quête d'Aritmia</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- React & ReactDOM -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <!-- Babel pour JSX -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    
+    <style>
+        body {
+            font-family: 'Inter', system-ui, -apple-system, sans-serif;
+            background-color: #f0fdf4;
+            background-image: url('data:image/svg+xml,%3Csvg width="60" height="60" viewBox="0 0 60 60" xmlns="http://www.w3.org/2000/svg"%3E%3Cg fill="none" fill-rule="evenodd"%3E%3Cg fill="%2322c55e" fill-opacity="0.05"%3E%3Cpath d="M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z"/%3E%3C/g%3E%3C/g%3E%3C/svg%3E');
+        }
+        
+        .venn-circle {
+            width: 250px;
+            height: 250px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+            position: relative;
+            cursor: pointer;
+            transition: all 0.2s ease-in-out;
+        }
+
+        .venn-circle:active {
+            transform: scale(0.95);
+        }
+
+        .intersection-zone {
+            position: absolute;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 120px;
+            height: 200px;
+            z-index: 10;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            border-radius: 50%;
+        }
+
+        /* Animations pour les feedbacks */
+        @keyframes pop {
+            0% { transform: scale(0.8); opacity: 0; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+        .animate-pop {
+            animation: pop 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+        }
+
+        /* Cache la scrollbar horizontale */
+        html, body { overflow-x: hidden; }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+
+        // --- COMPOSANTS DE BASE ---
+
+        const Button = ({ children, onClick, variant = 'primary', className = '', disabled = false }) => {
+            const baseStyle = "font-bold rounded-xl shadow-md transition-all duration-200 transform active:scale-95 text-lg py-3 px-6 touch-manipulation";
+            const variants = {
+                primary: "bg-emerald-500 hover:bg-emerald-600 text-white border-b-4 border-emerald-700",
+                secondary: "bg-amber-400 hover:bg-amber-500 text-amber-900 border-b-4 border-amber-600",
+                outline: "bg-white hover:bg-gray-50 text-gray-700 border-2 border-gray-300",
+                magic: "bg-purple-500 hover:bg-purple-600 text-white border-b-4 border-purple-700"
+            };
+            const disabledStyle = disabled ? "opacity-50 cursor-not-allowed transform-none" : "";
+
+            return (
+                <button 
+                    onClick={onClick} 
+                    disabled={disabled}
+                    className={`${baseStyle} ${variants[variant]} ${disabledStyle} ${className}`}
+                >
+                    {children}
+                </button>
+            );
+        };
+
+        const Feedback = ({ isCorrect, message }) => {
+            if (isCorrect === null) return null;
+            return (
+                <div className={`mt-4 p-4 rounded-xl border-2 animate-pop flex items-center gap-3 ${
+                    isCorrect ? 'bg-green-100 border-green-400 text-green-800' : 'bg-red-100 border-red-400 text-red-800'
+                }`}>
+                    <span className="text-3xl">{isCorrect ? '✅' : '❌'}</span>
+                    <p className="font-semibold text-lg">{message}</p>
+                </div>
+            );
+        };
+
+        const SectionTitle = ({ title, icon }) => (
+            <h2 className="text-3xl font-extrabold text-indigo-900 mb-6 flex items-center gap-3 border-b-4 border-indigo-200 pb-2">
+                <span className="text-4xl">{icon}</span>
+                {title}
+            </h2>
+        );
+
+        // --- ONGLET 1 : LA VALEUR DES NOMBRES ---
+        const TabValeur = () => {
+            const [qIndex, setQIndex] = useState(0);
+            const [score, setScore] = useState(0);
+            const [status, setStatus] = useState(null);
+            const [finished, setFinished] = useState(false);
+
+            const questions = [
+                { q: "Dans 345, combien y a-t-il de dizaines au total ?", options: [4, 34, 340, 5], ans: 34 },
+                { q: "Quelle est la valeur du 7 dans 27 513 ?", options: [70, 700, 7000, 7], ans: 7000 },
+                { q: "Dans 1 205, quel chiffre est à la position des centaines ?", options: [1, 2, 0, 5], ans: 2 },
+                { q: "Combien d'unités de mille au total dans 45 678 ?", options: [5, 45, 6, 456], ans: 45 },
+                { q: "Quelle est la valeur du 9 dans 98 000 ?", options: [900, 9000, 90000, 90], ans: 90000 },
+                { q: "Dans 5 432, combien y a-t-il de centaines au total ?", options: [4, 54, 543, 5], ans: 54 },
+                { q: "Quel est le chiffre des dizaines de mille dans 87 654 ?", options: [8, 7, 6, 5], ans: 8 },
+                { q: "Dans 10 000, combien y a-t-il de dizaines au total ?", options: [10, 100, 1000, 0], ans: 1000 },
+                { q: "Quelle est la valeur du 3 dans 13 456 ?", options: [300, 3000, 30000, 3], ans: 3000 },
+                { q: "Dans 99 999, combien de centaines au total ?", options: [9, 99, 999, 9999], ans: 999 }
+            ];
+
+            const handleAnswer = (ans) => {
+                if (status !== null) return;
+                if (ans === questions[qIndex].ans) {
+                    setStatus('correct');
+                    setScore(s => s + 1);
+                } else {
+                    setStatus('error');
+                }
+            };
+
+            const nextQuestion = () => {
+                if (qIndex < questions.length - 1) {
+                    setQIndex(qIndex + 1);
+                    setStatus(null);
+                } else {
+                    setFinished(true);
+                }
+            };
+
+            const recommencer = () => {
+                setQIndex(0);
+                setScore(0);
+                setStatus(null);
+                setFinished(false);
+            };
+
+            return (
+                <div className="space-y-8 animate-pop">
+                    <SectionTitle title="Le Temple des Valeurs" icon="🏛️" />
+                    
+                    <div className="bg-blue-50 p-6 rounded-2xl border-2 border-blue-200 shadow-sm">
+                        <h3 className="text-xl font-bold text-blue-800 mb-3">📜 Le Grimoire du Savoir : La valeur de position</h3>
+                        <p className="text-lg mb-4">
+                            La <strong>valeur de position</strong> est la valeur d'un chiffre dans un nombre selon sa place (unités, dizaines, centaines, etc.).<br/>
+                            Pour t’aider, utilise un tableau de numération !
+                        </p>
+                        
+                        <div className="overflow-x-auto my-6">
+                            <table className="min-w-full bg-white text-center border-collapse border-2 border-indigo-200 shadow-sm">
+                                <thead>
+                                    <tr className="bg-indigo-100 text-indigo-900 font-bold text-sm md:text-base">
+                                        <th className="border-2 border-indigo-200 p-2">Centaines de mille (CM)</th>
+                                        <th className="border-2 border-indigo-200 p-2">Dizaines de mille (DM)</th>
+                                        <th className="border-2 border-indigo-200 p-2">Unités de mille (UM)</th>
+                                        <th className="border-2 border-indigo-200 p-2">Centaines (C)</th>
+                                        <th className="border-2 border-indigo-200 p-2">Dizaines (D)</th>
+                                        <th className="border-2 border-indigo-200 p-2">Unités (U)</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr className="text-2xl font-black">
+                                        <td className="border-2 border-indigo-200 p-2 text-gray-300">0</td>
+                                        <td className="border-2 border-indigo-200 p-2 text-gray-300">0</td>
+                                        <td className="border-2 border-indigo-200 p-2 text-gray-300">0</td>
+                                        <td className="border-2 border-indigo-200 p-2 text-indigo-600 bg-yellow-100">3</td>
+                                        <td className="border-2 border-indigo-200 p-2">4</td>
+                                        <td className="border-2 border-indigo-200 p-2">7</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                            <p className="mt-2 text-center font-semibold">Dans 347, le <span className="text-indigo-600">3</span> est à la position des centaines. Sa valeur est <span className="text-indigo-600">300</span>.</p>
+                        </div>
+                    </div>
+
+                    <div className="bg-red-50 p-6 rounded-2xl border-2 border-red-200 shadow-sm">
+                        <h3 className="text-xl font-bold text-red-800 mb-3 flex items-center gap-2">⚠️ Piège d'Aventurier !</h3>
+                        <p className="text-lg">
+                            Pour connaître le nombre de dizaines <strong>au total</strong> dans un nombre, tu dois regarder combien de dizaines entrent dans tout le nombre (on cache les unités).
+                            <br/><br/>
+                            Exemple: Dans <strong>325</strong>, le chiffre des dizaines est 2, mais il y a <strong>32 dizaines au total</strong> !
+                        </p>
+                    </div>
+
+                    <div className="bg-white p-6 rounded-2xl border-2 border-gray-200 shadow-md">
+                        <h3 className="text-2xl font-bold mb-6 text-gray-800">Épreuve de Gardien : 10 Défis</h3>
+                        
+                        {!finished ? (
+                            <div className="animate-pop">
+                                <div className="flex justify-between items-center mb-4 text-gray-500 font-bold">
+                                    <span>Question {qIndex + 1} / 10</span>
+                                    <span>Score : {score}</span>
+                                </div>
+                                <p className="text-xl font-semibold mb-6 text-indigo-900">{questions[qIndex].q}</p>
+                                
+                                <div className="grid grid-cols-2 gap-4">
+                                    {questions[qIndex].options.map((opt, i) => (
+                                        <Button 
+                                            key={i} 
+                                            variant="outline" 
+                                            onClick={() => handleAnswer(opt)} 
+                                            disabled={status !== null}
+                                            className={`text-2xl py-4 ${status !== null && opt === questions[qIndex].ans ? 'bg-green-100 border-green-500 text-green-800' : ''} ${status === 'error' && opt !== questions[qIndex].ans ? 'opacity-50' : ''}`}
+                                        >
+                                            {opt}
+                                        </Button>
+                                    ))}
+                                </div>
+
+                                {status && (
+                                    <div className="mt-6 text-center animate-pop">
+                                        <Feedback 
+                                            isCorrect={status === 'correct'} 
+                                            message={status === 'correct' ? "Bonne réponse !" : `Oups ! La bonne réponse était ${questions[qIndex].ans}.`} 
+                                        />
+                                        <Button variant="primary" onClick={nextQuestion} className="mt-4">
+                                            {qIndex === 9 ? "Voir mes résultats" : "Question suivante ➔"}
+                                        </Button>
+                                    </div>
+                                )}
+                            </div>
+                        ) : (
+                            <div className="text-center animate-pop">
+                                <h4 className="text-3xl font-black mb-4 text-emerald-600">Épreuve Terminée !</h4>
+                                <p className="text-2xl mb-6">Ton score : <strong>{score} / 10</strong></p>
+                                <Button variant="secondary" onClick={recommencer}>Recommencer l'épreuve</Button>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            );
+        };
+
+        // --- ONGLET 2 : LES SUITES DE NOMBRES ---
+        const InteractiveDemoSuites = () => {
+            const [scenario, setScenario] = useState(0);
+            const [step, setStep] = useState(0);
+
+            const scenarios = [
+                {
+                    id: 0,
+                    label: "Suite qui monte",
+                    seq: [12, 17, 22],
+                    next: [27, 32, 37],
+                    bonds: ['+ 5', '+ 5', '+ 5', '+ 5', '+ 5'],
+                    explanations: [
+                        "Prêt à découvrir le secret ? Appuie sur le bouton pour commencer.",
+                        "Étape 1 : Je regarde les deux premiers nombres afin de les comparer (12 et 17).",
+                        "Étape 2 : Le 2e nombre (17) est plus grand. La suite grandit 📈.",
+                        "Étape 3 : Je fais une soustraction pour trouver la différence (17 - 12 = 5). Le premier bond est donc de + 5.",
+                        "Étape 4 : Je m'assure que le 2e bond est identique (22 - 17 = 5). Oui ! Je continue la logique avec + 5.",
+                        "Étape 5 : J'applique la règle pour trouver les 3 prochains nombres : 22+5=27, 27+5=32, 32+5=37."
+                    ]
+                },
+                {
+                    id: 1,
+                    label: "Suite qui descend",
+                    seq: [45, 41, 37],
+                    next: [33, 29, 25],
+                    bonds: ['- 4', '- 4', '- 4', '- 4', '- 4'],
+                    explanations: [
+                        "Prêt à découvrir le secret ? Appuie sur le bouton pour commencer.",
+                        "Étape 1 : Je regarde les deux premiers nombres afin de les comparer (45 et 41).",
+                        "Étape 2 : Le 2e nombre (41) est plus petit. La suite descend 📉.",
+                        "Étape 3 : Je fais une soustraction pour trouver la différence (45 - 41 = 4). Le premier bond est de - 4.",
+                        "Étape 4 : Je m'assure que le 2e bond est identique (41 - 37 = 4). Oui ! Je continue la logique avec - 4.",
+                        "Étape 5 : J'applique la règle pour trouver les 3 nombres suivants : 37-4=33, 33-4=29, 29-4=25."
+                    ]
+                },
+                {
+                    id: 2,
+                    label: "Deux bonds différents",
+                    seq: [10, 13, 18, 21],
+                    next: [26, 29, 34],
+                    bonds: ['+ 3', '+ 5', '+ 3', '+ 5', '+ 3', '+ 5'],
+                    explanations: [
+                        "Prêt à découvrir le secret ? Appuie sur le bouton pour commencer.",
+                        "Étape 1 : Je regarde les deux premiers nombres (10 et 13).",
+                        "Étape 2 : Le 2e nombre (13) est plus grand. La suite grandit 📈.",
+                        "Étape 3 : Je soustrais pour trouver la différence (13 - 10 = 3). Le 1er bond = + 3.",
+                        "Étape 4 : Je regarde le bond suivant (18 - 13 = 5). Oh, c'est + 5 ! Puis (21 - 18 = 3). C'est une suite avec deux bonds : + 3, + 5 !",
+                        "Étape 5 : J'applique cette alternance pour trouver 3 nombres : 21+5=26, 26+3=29, 29+5=34."
+                    ]
+                },
+                {
+                    id: 3,
+                    label: "Monte et descend",
+                    seq: [20, 24, 22, 26],
+                    next: [24, 28, 26],
+                    bonds: ['+ 4', '- 2', '+ 4', '- 2', '+ 4', '- 2'],
+                    explanations: [
+                        "Prêt à découvrir le secret ? Appuie sur le bouton pour commencer.",
+                        "Étape 1 : Je regarde les deux premiers nombres (20 et 24).",
+                        "Étape 2 : Le 2e nombre (24) est plus grand. La suite grandit 📈.",
+                        "Étape 3 : Je soustrais (24 - 20 = 4). Le 1er bond est de + 4.",
+                        "Étape 4 : Je regarde le 2e bond (de 24 à 22). Ça descend ! La différence est (24 - 22 = 2). C'est une suite qui monte et descend : + 4, - 2 !",
+                        "Étape 5 : Je continue la logique (+ 4, - 2) : 26-2=24, 24+4=28, 28-2=26."
+                    ]
+                }
+            ];
+
+            const current = scenarios[scenario];
+
+            const changeScenario = (id) => {
+                setScenario(id);
+                setStep(0);
+            };
+
+            const getHighlightClass = (index) => {
+                const isNextArray = index >= current.seq.length;
+                if (isNextArray) {
+                    return step >= 5 ? 'bg-green-200 scale-110 shadow-md border-green-400' : 'bg-gray-100 text-gray-400';
+                }
+                if (step === 1 && (index === 0 || index === 1)) return 'bg-yellow-200 scale-110 shadow-md border-yellow-400';
+                if (step === 2 && index === 1) return 'bg-blue-200 scale-110 shadow-md border-blue-400';
+                if (step === 3 && (index === 0 || index === 1)) return 'bg-red-200 scale-110 shadow-md border-red-400';
+                if (step === 4 && index >= 1 && index <= 3) return 'bg-purple-200 scale-110 shadow-md border-purple-400';
+                return 'bg-white shadow-sm border-transparent';
+            };
+
+            const allNumbers = [...current.seq, ...current.next];
+
+            return (
+                <div className="bg-purple-50 p-6 rounded-2xl border-2 border-purple-200 shadow-sm mb-8 overflow-hidden">
+                    <h3 className="text-xl font-bold text-purple-800 mb-4">🧭 Apprentissage Pas-à-pas</h3>
+                    
+                    <div className="flex flex-wrap gap-2 justify-center mb-6">
+                        {scenarios.map(scen => (
+                            <Button 
+                                key={scen.id} 
+                                variant={scenario === scen.id ? 'magic' : 'outline'} 
+                                onClick={() => changeScenario(scen.id)}
+                                className="text-sm py-2 px-4"
+                            >
+                                {scen.label}
+                            </Button>
+                        ))}
+                    </div>
+
+                    <div className="w-full overflow-x-auto pb-4 pt-20 no-scrollbar">
+                        <div className="flex justify-center items-center text-xl md:text-3xl font-black mb-4 min-w-max px-4 mx-auto">
+                            {allNumbers.map((num, i) => {
+                                const isNextArray = i >= current.seq.length;
+                                const showValue = !isNextArray || step >= 5;
+                                
+                                let bondVisible = false;
+                                if (i === 0 && step >= 3) bondVisible = true;
+                                if ((i === 1 || i === 2) && step >= 4) bondVisible = true;
+                                if (i >= 3 && step >= 5) bondVisible = true;
+
+                                return (
+                                    <React.Fragment key={i}>
+                                        <div className={`w-14 h-14 md:w-20 md:h-20 flex items-center justify-center rounded-xl transition-all border-2 relative z-10 flex-shrink-0 ${getHighlightClass(i)}`}>
+                                            {showValue ? num : '?'}
+                                        </div>
+                                        
+                                        {i < allNumbers.length - 1 && (
+                                            <div className="w-6 md:w-10 h-14 md:h-20 relative flex items-center justify-center flex-shrink-0">
+                                                <div className={`absolute bottom-full mb-1 left-1/2 -translate-x-1/2 w-[70px] md:w-[110px] flex flex-col items-center pointer-events-none transition-opacity duration-300 ${bondVisible ? 'opacity-100' : 'opacity-0 z-[-1]'}`}>
+                                                    <div className="h-6 md:h-8 flex items-end justify-center mb-1">
+                                                        {bondVisible && (
+                                                            <div className="whitespace-nowrap text-base md:text-xl font-bold text-indigo-600 animate-pop">
+                                                                {current.bonds[i]}
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                    <svg viewBox="0 0 100 50" preserveAspectRatio="none" className="w-full h-8 md:h-12 overflow-visible text-indigo-500">
+                                                        <path d="M 5 50 Q 50 5 95 50" fill="none" stroke="currentColor" strokeWidth="3" markerEnd="url(#arrowhead-demo)" />
+                                                        <defs>
+                                                          <marker id="arrowhead-demo" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto">
+                                                            <polygon points="0 0, 6 3, 0 6" fill="currentColor" />
+                                                          </marker>
+                                                        </defs>
+                                                    </svg>
+                                                </div>
+                                            </div>
+                                        )}
+                                    </React.Fragment>
+                                );
+                            })}
+                        </div>
+                    </div>
+                    
+                    <div className="text-center min-h-[100px] bg-white p-4 rounded-xl border border-purple-100 shadow-inner flex items-center justify-center">
+                        <p className={`text-lg font-bold ${
+                            step === 0 ? 'text-gray-700' : 
+                            step === 1 ? 'text-yellow-700' : 
+                            step === 2 ? 'text-blue-700' : 
+                            step === 3 ? 'text-red-700' : 
+                            step === 4 ? 'text-purple-700' : 
+                            'text-green-700'
+                        }`}>
+                            {current.explanations[step]}
+                        </p>
+                    </div>
+                    
+                    <div className="text-center mt-6">
+                        {step < 5 ? (
+                            <Button variant="magic" onClick={() => setStep(s => s + 1)}>Étape suivante de réflexion ➔</Button>
+                        ) : (
+                            <Button variant="outline" onClick={() => setStep(0)}>Revoir la méthode</Button>
+                        )}
+                    </div>
+                </div>
+            )
+        };
+
+        const TabSuites = () => {
+            const [gameState, setGameState] = useState('playing');
+            const [suite, setSuite] = useState([]);
+            const [expected, setExpected] = useState([]);
+            const [userAns, setUserAns] = useState(['', '', '']);
+            const [regleText, setRegleText] = useState("");
+            const [bondsArray, setBondsArray] = useState([]);
+
+            const genererSuite = () => {
+                const type = Math.floor(Math.random() * 4);
+                let start = Math.floor(Math.random() * 40) + 20;
+                let fullSeq = [start];
+                let r1, r2;
+                let description = "";
+                let newBonds = [];
+
+                if (type === 0) { // Monte
+                    r1 = Math.floor(Math.random() * 10) + 2;
+                    description = `+ ${r1}`;
+                } else if (type === 1) { // Descend
+                    r1 = Math.floor(Math.random() * 10) + 2;
+                    start += 40; 
+                    fullSeq[0] = start;
+                    description = `- ${r1}`;
+                } else if (type === 2) { // Monte, Monte (+a, +b)
+                    r1 = Math.floor(Math.random() * 5) + 2;
+                    r2 = Math.floor(Math.random() * 5) + 6;
+                    description = `+ ${r1}, + ${r2}`;
+                } else { // Monte, Descend (+a, -b)
+                    r1 = Math.floor(Math.random() * 8) + 5;
+                    r2 = Math.floor(Math.random() * 4) + 1;
+                    description = `+ ${r1}, - ${r2}`;
+                }
+
+                for(let i=0; i<6; i++) {
+                    let nextVal = fullSeq[i];
+                    if (type === 0) { nextVal += r1; newBonds.push(`+ ${r1}`); }
+                    else if (type === 1) { nextVal -= r1; newBonds.push(`- ${r1}`); }
+                    else if (type === 2) { 
+                        const bond = i % 2 === 0 ? r1 : r2;
+                        nextVal += bond; 
+                        newBonds.push(`+ ${bond}`);
+                    }
+                    else if (type === 3) {
+                        const bond = i % 2 === 0 ? r1 : -r2;
+                        nextVal += bond;
+                        newBonds.push(bond > 0 ? `+ ${bond}` : `- ${Math.abs(bond)}`);
+                    }
+                    fullSeq.push(nextVal);
+                }
+
+                setSuite(fullSeq.slice(0, 4));
+                setExpected([fullSeq[4], fullSeq[5], fullSeq[6]]);
+                setRegleText(description);
+                setBondsArray(newBonds);
+                setUserAns(['', '', '']);
+                setGameState('playing');
+            };
+
+            useEffect(() => { genererSuite(); }, []);
+
+            const verifier = () => {
+                const u1 = parseInt(userAns[0]);
+                const u2 = parseInt(userAns[1]);
+                const u3 = parseInt(userAns[2]);
+                if (u1 === expected[0] && u2 === expected[1] && u3 === expected[2]) {
+                    setGameState('correct');
+                } else {
+                    setGameState('error');
+                }
+            };
+
+            const updateAns = (index, value) => {
+                const newAns = [...userAns];
+                newAns[index] = value;
+                setUserAns(newAns);
+            };
+
+            return (
+                <div className="space-y-8 animate-pop">
+                    <SectionTitle title="Le Pont des Suites Logiques" icon="🌉" />
+                    
+                    <InteractiveDemoSuites />
+
+                    <div className="bg-white p-6 rounded-2xl border-2 border-gray-200 shadow-md text-center overflow-hidden">
+                        <h3 className="text-2xl font-bold mb-2">Trouve la suite pour traverser !</h3>
+                        <p className="text-gray-600 mb-2">Trouve la régularité (les bonds) et complète les <strong>trois</strong> nombres manquants.</p>
+
+                        <div className="w-full overflow-x-auto pb-4 pt-20 no-scrollbar mb-4">
+                            <div className="flex items-center justify-center text-xl md:text-3xl font-black min-w-max px-4 mx-auto">
+                                {[...suite, ...userAns].map((val, i) => {
+                                    const isInput = i >= suite.length;
+                                    const inputIndex = i - suite.length;
+                                    return (
+                                        <React.Fragment key={i}>
+                                            {isInput ? (
+                                                <input 
+                                                    type="number" 
+                                                    value={userAns[inputIndex]}
+                                                    onChange={(e) => updateAns(inputIndex, e.target.value)}
+                                                    className={`w-16 h-16 md:w-20 md:h-20 rounded-xl border-4 border-dashed text-center focus:outline-none relative z-10 flex-shrink-0
+                                                        ${gameState === 'correct' ? 'border-green-500 bg-green-50 text-green-900' : 'border-amber-400 bg-amber-50 text-amber-900 focus:border-amber-600'}
+                                                    `}
+                                                    placeholder="?"
+                                                    disabled={gameState === 'correct'}
+                                                />
+                                            ) : (
+                                                <div className="bg-indigo-100 text-indigo-800 rounded-xl shadow-inner w-16 h-16 md:w-20 md:h-20 relative z-10 text-center flex items-center justify-center flex-shrink-0">
+                                                    {val}
+                                                </div>
+                                            )}
+
+                                            {i < suite.length + userAns.length - 1 && (
+                                                <div className="w-6 md:w-10 h-16 md:h-20 relative flex items-center justify-center flex-shrink-0">
+                                                    <div className={`absolute bottom-full mb-1 left-1/2 -translate-x-1/2 w-[75px] md:w-[115px] flex flex-col items-center pointer-events-none transition-all duration-500 ${gameState === 'correct' ? 'opacity-100 text-green-500' : 'opacity-20 text-gray-400'}`}>
+                                                        <div className="h-6 md:h-8 flex items-end justify-center mb-1">
+                                                            {gameState === 'correct' && (
+                                                                <div className="whitespace-nowrap text-base md:text-xl font-bold text-green-600 animate-pop">
+                                                                    {bondsArray[i]}
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                        <svg viewBox="0 0 100 50" preserveAspectRatio="none" className="w-full h-8 md:h-12 overflow-visible">
+                                                            <path d="M 5 50 Q 50 5 95 50" fill="none" stroke="currentColor" strokeWidth="3" markerEnd="url(#arrowhead-game)" />
+                                                            <defs>
+                                                              <marker id="arrowhead-game" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto">
+                                                                <polygon points="0 0, 6 3, 0 6" fill="currentColor" />
+                                                              </marker>
+                                                            </defs>
+                                                        </svg>
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </React.Fragment>
+                                    );
+                                })}
+                            </div>
+                        </div>
+
+                        <Button variant="primary" onClick={verifier} disabled={userAns.includes('')}>
+                            Vérifier ma réponse
+                        </Button>
+
+                        {gameState === 'correct' && (
+                            <div className="mt-4">
+                                <Feedback isCorrect={true} message={`Magnifique ! La règle était : ${regleText}. Le pont est apparu !`} />
+                            </div>
+                        )}
+                        {gameState === 'error' && (
+                            <div className="mt-4">
+                                <Feedback isCorrect={false} message={`Oh non, le pont tremble ! Indice : Soustrais ${suite[0]} et ${suite[1]} pour trouver le premier bond, puis vérifie le suivant.`} />
+                            </div>
+                        )}
+
+                        <div className="mt-6">
+                            <Button variant="outline" onClick={genererSuite}>Nouvelle suite</Button>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        // --- ONGLET 3 : PROPRIÉTÉS DES NOMBRES ---
+        const TabProprietes = () => {
+            const [activeExplanation, setActiveExplanation] = useState('pairs');
+            
+            const numbersToPlace = [4, 7, 8, 9, 10, 16, 25];
+            const [placed, setPlaced] = useState({});
+            const [selectedNumber, setSelectedNumber] = useState(null);
+            const [feedback, setFeedback] = useState(null);
+
+            const explanations = {
+                pairs: {
+                    title: "Nombres Pairs et Impairs",
+                    content: "Un nombre pair se termine par 0, 2, 4, 6 ou 8. Il peut être séparé en deux parts égales. Les autres sont impairs (se terminent par 1, 3, 5, 7, 9).",
+                    visuel: "🍒🍒 | 🍒🍒 (Pair = 4) vs 🍒🍒 | 🍒 (Impair = 3)"
+                },
+                carres: {
+                    title: "Nombres Carrés",
+                    content: "Un nombre carré est le résultat d'un nombre multiplié par lui-même (ex: 3 x 3 = 9). On peut les placer en forme de carré parfait !",
+                    visuel: "🟩🟩🟩\n🟩🟩🟩\n🟩🟩🟩 (9 est un nombre carré)"
+                },
+                premiers: {
+                    title: "Nombres Premiers et Composés",
+                    content: "Un nombre premier n'a que DEUX diviseurs : 1 et lui-même (ex: 7). Un nombre composé en a plus (ex: 8 = 1, 2, 4, 8).",
+                    visuel: "7 ➔ (1 x 7) Seulement !\n8 ➔ (1x8), (2x4)"
+                }
+            };
+
+            const verifierPlacement = (num, zoneId) => {
+                const isPair = num % 2 === 0;
+                const isCarre = Number.isInteger(Math.sqrt(num));
+                
+                let correctZone = '';
+                if (isPair && isCarre) correctZone = 'pair-carre';
+                else if (!isPair && isCarre) correctZone = 'impair-carre';
+                else if (isPair && !isCarre) correctZone = 'pair';
+                else if (!isPair && !isCarre) correctZone = 'impair';
+
+                if (zoneId === correctZone) {
+                    setPlaced({...placed, [num]: zoneId});
+                    setSelectedNumber(null);
+                    setFeedback({isCorrect: true, msg: `${num} est bien placé !`});
+                } else {
+                    setFeedback({isCorrect: false, msg: `Attention, analyse bien les propriétés de ${num} (est-il pair ? impair ? carré ?).`});
+                }
+            };
+
+            return (
+                <div className="space-y-8 animate-pop">
+                    <SectionTitle title="La Grotte des Cristaux Magiques" icon="💎" />
+
+                    <div className="flex flex-wrap gap-2 justify-center mb-4">
+                        <Button variant={activeExplanation === 'pairs' ? 'primary' : 'outline'} onClick={() => setActiveExplanation('pairs')}>Pairs / Impairs</Button>
+                        <Button variant={activeExplanation === 'carres' ? 'primary' : 'outline'} onClick={() => setActiveExplanation('carres')}>Nombres Carrés</Button>
+                        <Button variant={activeExplanation === 'premiers' ? 'primary' : 'outline'} onClick={() => setActiveExplanation('premiers')}>Premiers / Composés</Button>
+                    </div>
+
+                    <div className="bg-indigo-50 p-6 rounded-2xl border-2 border-indigo-200 text-center min-h-[150px] flex flex-col justify-center">
+                        <h3 className="text-2xl font-bold text-indigo-900 mb-2">{explanations[activeExplanation].title}</h3>
+                        <p className="text-lg text-gray-700 mb-4">{explanations[activeExplanation].content}</p>
+                        <pre className="font-mono text-xl font-bold text-indigo-600 bg-white inline-block p-4 rounded-xl mx-auto shadow-sm whitespace-pre-wrap">
+                            {explanations[activeExplanation].visuel}
+                        </pre>
+                    </div>
+
+                    <div className="bg-white p-6 rounded-2xl border-2 border-gray-200 shadow-md">
+                        <h3 className="text-2xl font-bold mb-4 text-center">L'épreuve de Tri (Diagramme de Venn)</h3>
+                        <p className="text-center text-gray-600 mb-6">Sélectionne un nombre en haut, puis clique sur la bonne zone dans les cercles. Les nombres carrés qui sont pairs vont dans l'intersection !</p>
+
+                        {/* Nombres à placer */}
+                        <div className="flex justify-center gap-4 mb-12 flex-wrap">
+                            {numbersToPlace.map(num => (
+                                !placed[num] ? (
+                                    <button 
+                                        key={num}
+                                        onClick={() => setSelectedNumber(num)}
+                                        className={`w-16 h-16 rounded-full text-2xl font-bold shadow-md transition-all ${
+                                            selectedNumber === num ? 'bg-amber-400 text-amber-900 ring-4 ring-amber-600 scale-110' : 'bg-gray-100 text-gray-800 hover:bg-gray-200'
+                                        }`}
+                                    >
+                                        {num}
+                                    </button>
+                                ) : null
+                            ))}
+                        </div>
+
+                        {/* Diagramme de Venn 3 Cercles Alignés */}
+                        <div className="relative h-[280px] md:h-[450px] w-full max-w-4xl mx-auto flex items-center justify-center overflow-hidden touch-none select-none">
+                            
+                            {/* Cercle PAIR (Gauche) */}
+                            <div onClick={() => selectedNumber && verifierPlacement(selectedNumber, 'pair')} 
+                                 className="absolute left-[0%] md:left-[5%] w-[180px] h-[180px] md:w-[320px] md:h-[320px] rounded-full border-[4px] border-blue-500 bg-blue-100/40 cursor-pointer hover:bg-blue-200/50 z-10 transition-colors">
+                                
+                                {/* Titre parfaitement dans le cercle */}
+                                <div className="absolute top-[10%] md:top-[15%] left-[25%] md:left-[25%] -translate-x-1/2 font-black text-blue-900 text-[10px] md:text-lg text-center bg-white/90 px-2 py-1 md:px-3 rounded-full shadow-sm pointer-events-none">
+                                    Nombres<br/>Pairs
+                                </div>
+                                
+                                {/* Zone de dépose exclusive (Lune gauche) */}
+                                <div className="absolute left-[5%] md:left-[15%] top-[55%] -translate-y-1/2 w-[60px] md:w-[120px] flex flex-wrap gap-1 md:gap-2 justify-center content-center pointer-events-none">
+                                    {Object.keys(placed).filter(n => placed[n] === 'pair').map(n => (
+                                        <span key={n} className="bg-white text-blue-900 font-bold rounded-full w-8 h-8 md:w-10 md:h-10 text-sm md:text-base flex items-center justify-center shadow-md border-2 border-blue-300">{n}</span>
+                                    ))}
+                                </div>
+                            </div>
+
+                            {/* Cercle IMPAIR (Droite) */}
+                            <div onClick={() => selectedNumber && verifierPlacement(selectedNumber, 'impair')} 
+                                 className="absolute right-[0%] md:right-[5%] w-[180px] h-[180px] md:w-[320px] md:h-[320px] rounded-full border-[4px] border-red-500 bg-red-100/40 cursor-pointer hover:bg-red-200/50 z-10 transition-colors">
+                                
+                                {/* Titre parfaitement dans le cercle */}
+                                <div className="absolute top-[10%] md:top-[15%] right-[25%] md:right-[25%] translate-x-1/2 font-black text-red-900 text-[10px] md:text-lg text-center bg-white/90 px-2 py-1 md:px-3 rounded-full shadow-sm pointer-events-none">
+                                    Nombres<br/>Impairs
+                                </div>
+
+                                {/* Zone de dépose exclusive (Lune droite) */}
+                                <div className="absolute right-[5%] md:right-[15%] top-[55%] -translate-y-1/2 w-[60px] md:w-[120px] flex flex-wrap gap-1 md:gap-2 justify-center content-center pointer-events-none">
+                                    {Object.keys(placed).filter(n => placed[n] === 'impair').map(n => (
+                                        <span key={n} className="bg-white text-red-900 font-bold rounded-full w-8 h-8 md:w-10 md:h-10 text-sm md:text-base flex items-center justify-center shadow-md border-2 border-red-300">{n}</span>
+                                    ))}
+                                </div>
+                            </div>
+
+                            {/* Cercle CARRÉ (Centre) - Divisé en deux zones cliquables */}
+                            <div className="absolute left-1/2 -translate-x-1/2 top-[5%] md:top-[2%] w-[180px] h-[180px] md:w-[320px] md:h-[320px] rounded-full border-[4px] border-green-500 bg-green-100/40 flex z-20 overflow-hidden shadow-sm">
+                                
+                                {/* Titre parfaitement dans le cercle */}
+                                <div className="absolute top-[5%] md:top-[6%] left-1/2 -translate-x-1/2 font-black text-green-900 text-[10px] md:text-lg text-center bg-white/90 px-2 py-1 md:px-3 rounded-full shadow-sm whitespace-nowrap z-30 pointer-events-none">
+                                    Nombres Carrés
+                                </div>
+
+                                {/* Moitié Gauche (Intersection Pair + Carré) */}
+                                <div onClick={() => selectedNumber && verifierPlacement(selectedNumber, 'pair-carre')} 
+                                     className="w-1/2 h-full cursor-pointer hover:bg-green-300/50 transition-colors relative border-r border-transparent">
+                                    <div className="absolute left-[5%] md:left-[15%] top-[60%] md:top-[55%] -translate-y-1/2 w-[45px] md:w-[75px] flex flex-wrap gap-1 justify-center content-center pointer-events-none">
+                                        {Object.keys(placed).filter(n => placed[n] === 'pair-carre').map(n => (
+                                            <span key={n} className="bg-amber-400 text-amber-900 border-2 border-amber-600 font-bold rounded-full w-8 h-8 md:w-10 md:h-10 text-sm md:text-base flex items-center justify-center shadow-lg">{n}</span>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                {/* Moitié Droite (Intersection Impair + Carré) */}
+                                <div onClick={() => selectedNumber && verifierPlacement(selectedNumber, 'impair-carre')} 
+                                     className="w-1/2 h-full cursor-pointer hover:bg-green-300/50 transition-colors relative">
+                                    <div className="absolute right-[5%] md:right-[15%] top-[60%] md:top-[55%] -translate-y-1/2 w-[45px] md:w-[75px] flex flex-wrap gap-1 justify-center content-center pointer-events-none">
+                                        {Object.keys(placed).filter(n => placed[n] === 'impair-carre').map(n => (
+                                            <span key={n} className="bg-amber-400 text-amber-900 border-2 border-amber-600 font-bold rounded-full w-8 h-8 md:w-10 md:h-10 text-sm md:text-base flex items-center justify-center shadow-lg">{n}</span>
+                                        ))}
+                                    </div>
+                                </div>
+
+                            </div>
+                        </div>
+
+                        {feedback && (
+                            <div className="mt-4 max-w-xl mx-auto">
+                                <Feedback isCorrect={feedback.isCorrect} message={feedback.msg} />
+                            </div>
+                        )}
+                        
+                        <div className="text-center mt-8">
+                            <Button variant="outline" onClick={() => {
+                                setPlaced({});
+                                setSelectedNumber(null);
+                                setFeedback(null);
+                            }}>Réinitialiser le tri</Button>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        // --- ONGLET 4 : MULTIPLIER DES NOMBRES RONDS ---
+        const InteractiveDemoMult = () => {
+            const [step, setStep] = useState(0);
+            return (
+                <div className="bg-teal-50 p-6 rounded-2xl border-2 border-teal-200 shadow-sm mb-8">
+                    <h3 className="text-xl font-bold text-teal-800 mb-4">✨ Apprentissage Pas-à-pas : Multiplier des nombres ronds</h3>
+                    <div className="flex justify-center items-center text-4xl md:text-5xl font-black mb-8 h-24 bg-white rounded-xl p-4 mx-auto w-max shadow-inner">
+                        <span className={`transition-colors ${step >= 1 ? "text-indigo-600" : ""}`}>6</span>
+                        <span className={`transition-colors ${step >= 2 ? "text-red-500" : ""}`}>0</span>
+                        <span className="text-gray-400 mx-3">x</span>
+                        <span className={`transition-colors ${step >= 1 ? "text-indigo-600" : ""}`}>3</span>
+                        <span className={`transition-colors ${step >= 2 ? "text-red-500" : ""}`}>00</span>
+                        <span className="text-gray-400 mx-3">=</span>
+                        {step >= 3 ? (
+                            <span className="animate-pop">
+                                <span className="text-indigo-600">18</span>
+                                <span className="text-red-500">000</span>
+                            </span>
+                        ) : (
+                            <span className="text-gray-300">?</span>
+                        )}
+                    </div>
+                    
+                    <div className="text-center min-h-[100px] bg-white p-4 rounded-xl border border-teal-100 shadow-sm">
+                        {step === 0 && <p className="text-lg">Comment résoudre 60 x 300 comme un génie ?</p>}
+                        {step >= 1 && <p className="text-lg text-indigo-700 font-bold mb-2">Étape 1 : Je multiplie les chiffres sans les zéros : <span className="bg-indigo-100 px-2 rounded">6 x 3 = 18</span>.</p>}
+                        {step >= 2 && <p className="text-lg text-red-700 font-bold mb-2">Étape 2 : Je compte tous les zéros : 1 zéro (dans 60) + 2 zéros (dans 300) = <span className="bg-red-100 px-2 rounded">3 zéros au total</span>.</p>}
+                        {step >= 3 && <p className="text-lg text-green-700 font-bold mb-2">Étape 3 : J'ajoute les 3 zéros à la suite du 18. La réponse est <span className="bg-green-100 px-2 rounded text-green-900">18 000</span> !</p>}
+                    </div>
+                    
+                    <div className="text-center mt-6">
+                        {step < 3 ? (
+                            <Button variant="magic" onClick={() => setStep(s => s + 1)}>Dévoiler l'étape suivante ➔</Button>
+                        ) : (
+                            <Button variant="outline" onClick={() => setStep(0)}>Revoir la méthode</Button>
+                        )}
+                    </div>
+                </div>
+            )
+        };
+
+        const TabMultiplication = () => {
+            const [qIndex, setQIndex] = useState(0);
+            const [score, setScore] = useState(0);
+            const [status, setStatus] = useState(null);
+            const [finished, setFinished] = useState(false);
+            const [questions, setQuestions] = useState([]);
+
+            const generateQuestions = () => {
+                const newQs = [];
+                for(let i=0; i<10; i++) {
+                    const a = Math.floor(Math.random() * 9) + 1;
+                    const b = Math.floor(Math.random() * 9) + 1;
+                    const zerosA = Math.random() > 0.5 ? 10 : 1;
+                    const zerosB = [10, 100, 1000][Math.floor(Math.random() * 3)];
+                    
+                    const f1 = a * zerosA;
+                    const f2 = b * zerosB;
+                    const ans = f1 * f2;
+                    
+                    // Générer 3 mauvaises réponses plausibles
+                    const distractors = new Set();
+                    while(distractors.size < 3) {
+                        const wrongZeros = [1, 10, 100, 1000, 10000][Math.floor(Math.random() * 5)];
+                        const wrongAns = (a * b) * wrongZeros;
+                        if(wrongAns !== ans) distractors.add(wrongAns);
+                    }
+                    const options = [ans, ...Array.from(distractors)].sort(() => Math.random() - 0.5);
+                    
+                    newQs.push({ f1, f2, ans, options });
+                }
+                setQuestions(newQs);
+                setQIndex(0);
+                setScore(0);
+                setStatus(null);
+                setFinished(false);
+            };
+
+            useEffect(() => { generateQuestions(); }, []);
+
+            const handleAnswer = (opt) => {
+                if(status !== null) return;
+                if(opt === questions[qIndex].ans) {
+                    setStatus('correct');
+                    setScore(s => s + 1);
+                } else {
+                    setStatus('error');
+                }
+            };
+
+            const nextQuestion = () => {
+                if (qIndex < 9) {
+                    setQIndex(qIndex + 1);
+                    setStatus(null);
+                } else {
+                    setFinished(true);
+                }
+            };
+
+            if(questions.length === 0) return null;
+
+            return (
+                <div className="space-y-8 animate-pop">
+                    <SectionTitle title="La Lampe du Génie des Calculs" icon="🧞‍♂️" />
+
+                    <InteractiveDemoMult />
+
+                    <div className="bg-white p-6 rounded-2xl border-2 border-gray-200 shadow-md text-center">
+                        <h3 className="text-2xl font-bold mb-6">Prouve que tu es un Génie !</h3>
+                        
+                        {!finished ? (
+                            <div className="animate-pop">
+                                <div className="flex justify-between items-center mb-4 text-gray-500 font-bold max-w-xl mx-auto">
+                                    <span>Défi {qIndex + 1} / 10</span>
+                                    <span>Génies : {score}</span>
+                                </div>
+                                
+                                <div className="text-4xl md:text-6xl font-black text-indigo-900 tracking-wider mb-8">
+                                    {questions[qIndex].f1} <span className="text-teal-500">x</span> {questions[qIndex].f2} <span className="text-teal-500">= ?</span>
+                                </div>
+                                
+                                <div className="grid grid-cols-2 gap-4 max-w-xl mx-auto">
+                                    {questions[qIndex].options.map((opt, i) => (
+                                        <Button 
+                                            key={i} 
+                                            variant="outline" 
+                                            onClick={() => handleAnswer(opt)}
+                                            disabled={status !== null}
+                                            className={`text-2xl md:text-3xl py-4 font-black ${status !== null && opt === questions[qIndex].ans ? 'bg-teal-100 border-teal-500 text-teal-800' : ''} ${status === 'error' && opt !== questions[qIndex].ans ? 'opacity-50' : ''}`}
+                                        >
+                                            {opt}
+                                        </Button>
+                                    ))}
+                                </div>
+
+                                {status && (
+                                    <div className="mt-6 text-center animate-pop max-w-xl mx-auto">
+                                        <Feedback 
+                                            isCorrect={status === 'correct'} 
+                                            message={status === 'correct' ? "POUF ! 🧞‍♂️ Exact !" : `Aïe ! N'oublie pas de compter TOUS les zéros. La réponse était ${questions[qIndex].ans}.`} 
+                                        />
+                                        <Button variant="primary" onClick={nextQuestion} className="mt-4">
+                                            {qIndex === 9 ? "Voir mes pouvoirs de génie" : "Prochain calcul ➔"}
+                                        </Button>
+                                    </div>
+                                )}
+                            </div>
+                        ) : (
+                            <div className="text-center animate-pop">
+                                <h4 className="text-3xl font-black mb-4 text-teal-600">Épreuve Terminée !</h4>
+                                <p className="text-2xl mb-6">Pouvoirs obtenus : <strong>{score} / 10</strong></p>
+                                <Button variant="magic" onClick={generateQuestions}>Invoquer de nouveaux calculs</Button>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            );
+        };
+
+        // --- COMPOSANT PRINCIPAL (APP) ---
+        const App = () => {
+            const [activeTab, setActiveTab] = useState(1);
+
+            const tabs = [
+                { id: 1, label: "Valeur des nombres", icon: "🏛️" },
+                { id: 2, label: "Suites logiques", icon: "🌉" },
+                { id: 3, label: "Propriétés", icon: "💎" },
+                { id: 4, label: "Multiplication magique", icon: "🧞‍♂️" },
+            ];
+
+            return (
+                <div className="min-h-screen flex flex-col pb-12">
+                    {/* Header */}
+                    <header className="bg-emerald-700 text-white p-6 shadow-lg relative overflow-hidden">
+                        <div className="absolute top-[-20px] right-[-20px] opacity-10 text-9xl">🗺️</div>
+                        <div className="max-w-6xl mx-auto">
+                            <h1 className="text-4xl md:text-5xl font-black tracking-tight mb-2">L'Aventure Mathématique</h1>
+                            <p className="text-xl text-emerald-100 font-semibold">2e Cycle - La quête d'Aritmia</p>
+                        </div>
+                    </header>
+
+                    {/* Navigation */}
+                    <nav className="bg-white shadow-md sticky top-0 z-50">
+                        <div className="max-w-6xl mx-auto flex overflow-x-auto touch-pan-x snap-x no-scrollbar">
+                            {tabs.map(tab => (
+                                <button
+                                    key={tab.id}
+                                    onClick={() => setActiveTab(tab.id)}
+                                    className={`snap-start flex-1 min-w-[200px] py-4 px-6 text-center font-bold text-lg transition-colors border-b-4 ${
+                                        activeTab === tab.id 
+                                        ? 'border-emerald-500 text-emerald-700 bg-emerald-50' 
+                                        : 'border-transparent text-gray-500 hover:text-emerald-600 hover:bg-gray-50'
+                                    }`}
+                                >
+                                    <span className="text-2xl block mb-1">{tab.icon}</span>
+                                    {tab.label}
+                                </button>
+                            ))}
+                        </div>
+                    </nav>
+
+                    {/* Contenu Principal */}
+                    <main className="flex-grow max-w-5xl mx-auto w-full p-4 md:p-8">
+                        {activeTab === 1 && <TabValeur />}
+                        {activeTab === 2 && <TabSuites />}
+                        {activeTab === 3 && <TabProprietes />}
+                        {activeTab === 4 && <TabMultiplication />}
+                    </main>
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
